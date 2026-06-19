@@ -12,6 +12,7 @@ __pycache__/
 .venv/
 venv/
 env/
+抖音视频文案/extract.py
 
 # Obsidian 本地缓存
 .obsidian/cache/
