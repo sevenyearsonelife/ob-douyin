@@ -15,3 +15,8 @@ env/
 
 # Obsidian 本地缓存
 .obsidian/cache/
+# Obsidian 工作区状态(运行时持续回写,不同步)
+.obsidian/workspace.json
+
+# Obsidian Base 插件草稿视图(未命名/临时)
+*.base
