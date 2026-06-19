@@ -16,6 +16,7 @@ from datetime import datetime
 SCRIPT_DIR = Path(__file__).resolve().parent
 LINKS_FILE = SCRIPT_DIR / "00抖音视频链接.md"
 RECORD_FILE = SCRIPT_DIR / "01提取记录.md"
+CONTENT_DIR = SCRIPT_DIR / "文案"  # 文案文件统一存放在「文案」子目录
 TRANSCRIBE_SCRIPT = Path.home() / ".claude/skills/douyin-transcript/scripts/transcribe.py"
 
 DOUYIN_LINK_RE = re.compile(r'https://v\.douyin\.com/[\w\-/]+')
@@ -108,12 +109,12 @@ def segment_text(text: str) -> str:
 
 
 def append_record(url: str, filename: str):
-    """追加一条提取记录，文件名用 markdown 超链接"""
+    """追加一条提取记录，文件名用 markdown 超链接（指向「文案」子目录）"""
     from urllib.parse import quote
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
     encoded = quote(filename, safe='')
     with open(RECORD_FILE, 'a', encoding='utf-8') as f:
-        f.write(f"| {url} | [{filename}]({encoded}) | {timestamp} |\n")
+        f.write(f"| {url} | [{filename}](文案/{encoded}) | {timestamp} |\n")
 
 
 def ensure_record_header():
@@ -148,6 +149,7 @@ def main():
     print(f"其中 {len(new_links)} 条未提取，开始处理...\n")
 
     ensure_record_header()
+    CONTENT_DIR.mkdir(exist_ok=True)
 
     success = 0
     for i, url in enumerate(new_links, 1):
@@ -158,7 +160,7 @@ def main():
             text_content = data.get('text', '')
 
             filename = sanitize_filename(title) + '.md'
-            filepath = SCRIPT_DIR / filename
+            filepath = CONTENT_DIR / filename
             body = segment_text(text_content)
             filepath.write_text(f"视频链接：[{url}]({url})\n\n{body}", encoding='utf-8')
 
