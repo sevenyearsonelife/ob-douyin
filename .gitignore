@@ -1,0 +1,17 @@
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 日志文件
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Obsidian 本地缓存
+.obsidian/cache/
