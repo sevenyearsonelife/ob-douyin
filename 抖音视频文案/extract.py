@@ -20,6 +20,23 @@ TRANSCRIBE_SCRIPT = Path.home() / ".claude/skills/douyin-transcript/scripts/tran
 
 DOUYIN_LINK_RE = re.compile(r'https://v\.douyin\.com/[\w\-/]+')
 
+# 语义分段由通义千问完成(与 ASR 共用 DASHSCOPE_API_KEY / dashscope SDK)。
+# 分段为可选增强:无 key 或调用失败时回退为原文(不分段),不中断提取流程。
+SEGMENT_MODEL = "qwen-plus"
+SEGMENT_PROMPT = """你是文案分段助手。下面是一段抖音视频语音转写的连续文本,请基于语义重新分段:
+
+规则:
+1. 先判断文本类型(独白/对话/问答/研报等),按其自然的逻辑单元分段
+2. 在话题转换、场景切换、论点递进、问答轮次结束处断开新段
+3. 段内不换行(一个段落写成一整行),段落之间用一个空行分隔
+4. 克制分段:宁可段落稍长也不要碎段,过渡句、短引子并入相邻段落
+5. 逐字保留原文,不润色、不改写、不删减、不增字,不加标题、序号、解释或任何前后缀
+
+只输出分段后的正文,不要任何额外说明。
+
+【原文】
+{text}"""
+
 
 def extract_links(text: str) -> list[str]:
     """从文本中提取抖音视频链接（去重，保持顺序）"""
@@ -45,8 +62,6 @@ def sanitize_filename(title: str, max_len: int = 60) -> str:
     return title if title else "未命名视频"
 
 
-# 分段由大模型（Claude）基于语义完成，脚本不做关键词规则分段
-
 def transcribe(url: str) -> dict:
     """调用 transcribe.py --json 获取转写结果"""
     result = subprocess.run(
@@ -60,6 +75,36 @@ def transcribe(url: str) -> dict:
         return json.loads(result.stdout.strip())
     except json.JSONDecodeError:
         raise RuntimeError(f"无法解析 JSON 输出: {result.stdout[:500]}")
+
+
+def segment_text(text: str) -> str:
+    """用通义千问对转写文本做语义分段;无 key 或调用失败时回退原文(不分段)。"""
+    if not text or not text.strip():
+        return text
+    api_key = os.getenv("DASHSCOPE_API_KEY")
+    try:
+        import dashscope
+    except ImportError:
+        print("  (缺少 dashscope,跳过分段)")
+        return text
+    if not api_key:
+        print("  (未设置 DASHSCOPE_API_KEY,跳过分段)")
+        return text
+    try:
+        dashscope.api_key = api_key
+        resp = dashscope.Generation.call(
+            model=SEGMENT_MODEL,
+            messages=[{"role": "user", "content": SEGMENT_PROMPT.format(text=text)}],
+            result_format="message",
+        )
+        if resp.status_code == 200:
+            content = resp.output.choices[0].message.content.strip()
+            if content:
+                return content
+        print(f"  (分段未成功 status={resp.status_code},使用原文)")
+    except Exception as e:
+        print(f"  (分段异常,使用原文: {e})")
+    return text
 
 
 def append_record(url: str, filename: str):
@@ -114,7 +159,8 @@ def main():
 
             filename = sanitize_filename(title) + '.md'
             filepath = SCRIPT_DIR / filename
-            filepath.write_text(f"视频链接：{url}\n\n{text_content}", encoding='utf-8')
+            body = segment_text(text_content)
+            filepath.write_text(f"视频链接：[{url}]({url})\n\n{body}", encoding='utf-8')
 
             append_record(url, filename)
             print(f"  ✅ {filename}")
